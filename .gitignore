@@ -181,4 +181,7 @@ a.py
 a.txt
 mongo.txt
 test_db.py
+/equity_data
+symbol_map.json
+
 

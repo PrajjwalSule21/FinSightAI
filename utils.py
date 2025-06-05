@@ -1,69 +1,78 @@
-import difflib
-from fastapi import HTTPException
-import json
-import pandas as pd
-import yfinance as yf
-import pandas as pd
-from config.symbol_map import get_symbol_map
+import requests
+import os
+from dotenv import load_dotenv; load_dotenv()
 
+API_KEY = os.getenv("API_KEY")  # Replace with your real API key
 
-def get_ticker_symbol(company_name: str) -> str:
-    company_ticker_map = get_symbol_map()
+# Fetch income statement
+def fetch_income_statement(symbol: str):
+    url = f"https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol={symbol}&apikey={API_KEY}"
+    response = requests.get(url)
+    data = response.json()
+    return data["annualReports"][0] if "annualReports" in data else None
 
-    company_name = company_name.lower()
-    lower_map = {name.lower(): symbol for name, symbol in company_ticker_map.items()}
-    close_match = difflib.get_close_matches(company_name, lower_map.keys(), n=1)
+# Fetch balance sheet
+def fetch_balance_sheet(symbol: str):
+    url = f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={symbol}&apikey={API_KEY}"
+    response = requests.get(url)
+    data = response.json()
+    return data["annualReports"][0] if "annualReports" in data else None
 
-    if close_match:
-        return lower_map[close_match[0]]
-    
-    return None
+# Fetch cash flow statement
+def fetch_cash_flow(symbol: str):
+    url = f"https://www.alphavantage.co/query?function=CASH_FLOW&symbol={symbol}&apikey={API_KEY}"
+    response = requests.get(url)
+    data = response.json()
+    return data["annualReports"][0] if "annualReports" in data else None
 
+# Fetch company overview
+def fetch_overview(symbol: str):
+    url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={API_KEY}"
+    response = requests.get(url)
+    return response.json()
 
+# Calculate financial ratios and metrics
+def calculate_ratios(income, balance, cash_flow, overview):
+    def safe_div(numerator, denominator):
+        try:
+            return float(numerator) / float(denominator)
+        except:
+            return None
 
-def extract_company_info(ticker_symbol):
-    ticker = yf.Ticker(ticker_symbol)
-    
-    try:
-        company_info = ticker.info
-        if not company_info or 'longName' not in company_info:
-            raise HTTPException(status_code=404, detail="Company info not found or unauthorized access.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch company info: {e}")
+    return {
+        "EPS": overview.get("EPS"),
+        "Revenue": income.get("totalRevenue"),
+        "Gross Profit": income.get("grossProfit"),
+        "Operating Income": income.get("operatingIncome"),
+        "Net Income": income.get("netIncome"),
 
-    
-    extracted_info = {
-        'Symbol': ticker_symbol,
-        'Name': company_info.get('longName'),
-        'Industry': company_info.get('industry'),
-        'Sector': company_info.get('sector'),
-        'Address': f"{company_info.get('address1')}, {company_info.get('address2')}, {company_info.get('city')}, {company_info.get('country')}",
-        'Phone': company_info.get('phone'),
-        'Website': company_info.get('website'),
-        'Description': company_info.get('longBusinessSummary'),
-        'Full-Time Employees': company_info.get('fullTimeEmployees'),
-        'Trailing P/E': company_info.get('trailingPE'),
-        'Forward P/E': company_info.get('forwardPE'),
-        'Trailing EPS': company_info.get('trailingEps'),
-        'Forward EPS': company_info.get('forwardEps'),
-        'Dividend Rate': company_info.get('dividendRate'),
-        'Dividend Yield': company_info.get('dividendYield'),
-        'Beta': company_info.get('beta'),
-        'Market Cap': company_info.get('marketCap'),
-        '52-Week High': company_info.get('fiftyTwoWeekHigh'),
-        '52-Week Low': company_info.get('fiftyTwoWeekLow'),
-        'Revenue': company_info.get('totalRevenue'),
-        'Gross Margins': company_info.get('grossMargins'),
-        'Operating Margins': company_info.get('operatingMargins'),
-        'Net Income': company_info.get('netIncomeToCommon'),
-        'Debt to Equity': company_info.get('debtToEquity'),
-        'Book Value': company_info.get('bookValue'),
-        'Price to Book': company_info.get('priceToBook'),
-        'Analyst Recommendation Mean': company_info.get('recommendationMean'),
-        'Target Mean Price': company_info.get('targetMeanPrice'),
-        'Current Price': company_info.get('currentPrice'),
-        'Revenue Growth': company_info.get('revenueGrowth'),
-        'Earnings Growth': company_info.get('earningsGrowth')
+        "Total Assets": balance.get("totalAssets"),
+        "Total Liabilities": balance.get("totalLiabilities"),
+        "Shareholder Equity": balance.get("totalShareholderEquity"),
+        "Book Value per Share": overview.get("BookValue"),
+
+        "Operating Cash Flow": cash_flow.get("operatingCashflow"),
+        "Investing Cash Flow": cash_flow.get("cashflowFromInvestment"),
+        "Financing Cash Flow": cash_flow.get("cashflowFromFinancing"),
+        "Free Cash Flow": cash_flow.get("freeCashFlow"),
+
+        # Valuation
+        "P/E Ratio": overview.get("PERatio"),
+        "P/B Ratio": overview.get("PriceToBookRatio"),
+        "P/S Ratio": overview.get("PriceToSalesRatioTTM"),
+        "Market Capitalization": overview.get("MarketCapitalization"),
+        "Dividend Yield": overview.get("DividendYield"),
+
+        # Profitability
+        "ROE": safe_div(income.get("netIncome"), balance.get("totalShareholderEquity")),
+        "ROA": safe_div(income.get("netIncome"), balance.get("totalAssets")),
+        "Gross Margin": safe_div(income.get("grossProfit"), income.get("totalRevenue")),
+        "Operating Margin": safe_div(income.get("operatingIncome"), income.get("totalRevenue")),
+        "Net Profit Margin": safe_div(income.get("netIncome"), income.get("totalRevenue")),
+
+        # Leverage & Liquidity
+        "Debt-to-Equity Ratio": safe_div(balance.get("totalLiabilities"), balance.get("totalShareholderEquity")),
+        "Current Ratio": overview.get("CurrentRatio"),
+        "Quick Ratio": overview.get("QuickRatio"),
+        "Interest Coverage Ratio": overview.get("InterestCoverage")
     }
-    
-    return extracted_info
