@@ -1,13 +1,14 @@
 import difflib
+from http.client import HTTPException
 import json
 import pandas as pd
 import yfinance as yf
 import pandas as pd
+from config.symbol_map import get_symbol_map
 
 
 def get_ticker_symbol(company_name: str) -> str:
-    with open("symbol_map.json", "r", encoding="utf-8") as f:
-        company_ticker_map = json.load(f)
+    company_ticker_map = get_symbol_map()
 
     company_name = company_name.lower()
     lower_map = {name.lower(): symbol for name, symbol in company_ticker_map.items()}
@@ -23,7 +24,13 @@ def get_ticker_symbol(company_name: str) -> str:
 def extract_company_info(ticker_symbol):
     ticker = yf.Ticker(ticker_symbol)
     
-    company_info = ticker.info
+    try:
+        company_info = ticker.info
+        if not company_info or 'longName' not in company_info:
+            raise HTTPException(status_code=404, detail="Company info not found or unauthorized access.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch company info: {e}")
+
     
     extracted_info = {
         'Symbol': ticker_symbol,
@@ -60,17 +67,3 @@ def extract_company_info(ticker_symbol):
     }
     
     return extracted_info
-
-
-
-def comp_symbol_map():
-    df = pd.read_csv("equity_data/equity.csv")
-    df.columns = [col.strip().upper() for col in df.columns]
-
-    company_names = df["NAME OF COMPANY"].astype(str).str.strip()
-    symbol_map = dict(zip(company_names, df["SYMBOL"].astype(str).str.strip()))
-
-    with open("symbol_map.json", "w", encoding="utf-8") as f:
-        json.dump(symbol_map, f, ensure_ascii=False, indent=4)
-
-    return symbol_map
