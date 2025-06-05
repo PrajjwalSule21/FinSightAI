@@ -1,5 +1,5 @@
 import difflib
-from http.client import HTTPException
+from fastapi import HTTPException
 import json
 import pandas as pd
 import yfinance as yf
