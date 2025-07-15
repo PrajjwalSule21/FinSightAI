@@ -1,10 +1,16 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Security, status
+from fastapi.params import Depends
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
-from utils import calculate_ratios, fetch_balance_sheet, fetch_cash_flow
-from utils import fetch_income_statement, fetch_overview
 from fastapi.middleware.cors import CORSMiddleware
+from Services.finance_data import fundamental_analysis
+from LyzrAgent.agent import chat_with_agent
 
-app = FastAPI()
+app = FastAPI(
+    title="Stock Data Tool API",
+    description="API for performing fundamental analysis on stock data using Lyzr Agent.",
+    version="1.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,47 +20,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+API_KEY_NAME = "x-api-key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+
+def get_api_key(api_key: str = Security(api_key_header)):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API key is missing"
+        )
+    
+    return api_key
+
+
+                
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Stock Data Tool API"}
+
+
 class TickerRequest(BaseModel):
     symbol: str
 
 @app.post("/fundamental-analysis")
-async def fundamental_analysis(request: TickerRequest):
+async def fundamental_analysis_report(request: TickerRequest, api_key: str = Depends(get_api_key)):
     symbol = request.symbol.upper()
 
     try:
-        income = fetch_income_statement(symbol)
+        financial_data = fundamental_analysis(symbol)
+        if not financial_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No financial data found for ticker: {symbol}"
+            )
+        analysis_report = chat_with_agent(
+            message=f"Financial Data:\n{financial_data}",
+            user_api_key=api_key)
+        
+        if not analysis_report:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to get analysis report from Lyzr Agent"
+            )
+        
+        return {
+            "symbol": symbol,
+            "financial_data": financial_data,
+            "analysis_report": analysis_report
+        }
+            
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch income statement: {e}")
-
-    try:
-        balance = fetch_balance_sheet(symbol)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch balance sheet: {e}")
-
-    try:
-        cash_flow = fetch_cash_flow(symbol)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch cash flow statement: {e}")
-
-    try:
-        overview = fetch_overview(symbol)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch overview: {e}")
-
-    if not all([income, balance, cash_flow, overview]):
-        raise HTTPException(status_code=404, detail=f"Incomplete financial data for symbol: {symbol}")
-
-    try:
-        report = calculate_ratios(income, balance, cash_flow, overview)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to calculate ratios: {e}")
-
-    return {
-        "name": overview.get("Name"),
-        "symbol": symbol,
-        "income_statement": income,
-        "balance_sheet": balance,
-        "cash_flow": cash_flow,
-        "overview": overview,
-        "ratios": report
-    }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
