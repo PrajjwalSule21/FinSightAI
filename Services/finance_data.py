@@ -80,30 +80,30 @@ def fundamental_analysis(symbol: str):
     try:
         income = fetch_income_statement(symbol)
     except Exception as e:
-        raise "Failed to fetch income statement: {e}"
+        raise ValueError(f"Failed to fetch income statement: {e}")
 
     try:
         balance = fetch_balance_sheet(symbol)
     except Exception as e:
-        raise "Failed to fetch balance sheet: {e}"
+        raise ValueError(f"Failed to fetch balance sheet: {e}")
 
     try:
         cash_flow = fetch_cash_flow(symbol)
     except Exception as e:
-        raise "Failed to fetch cash flow statement: {e}"
+        raise ValueError(f"Failed to fetch cash flow statement: {e}")
 
     try:
         overview = fetch_overview(symbol)
     except Exception as e:
-        raise "Failed to fetch overview: {e}"
+        raise ValueError(f"Failed to fetch overview: {e}")
 
     if not all([income, balance, cash_flow, overview]):
-        raise "Incomplete financial data for symbol: {symbol}"
+        raise ValueError(f"Incomplete financial data for symbol: {symbol}")
 
     try:
         report = calculate_ratios(income, balance, cash_flow, overview)
     except Exception as e:
-        raise "Failed to calculate ratios: {e}"
+        raise ValueError(f"Failed to calculate ratios: {e}")
 
     return {
         "name": overview.get("Name"),
