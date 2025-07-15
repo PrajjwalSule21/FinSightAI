@@ -4,6 +4,11 @@ FinSightAI is an AI-powered financial analysis tool that leverages **Alpha Vanta
 
 ---
 
+You can use this app:
+```bash
+https://finsightai-frontend.streamlit.app/
+```
+
 ## 🔐 Prerequisites
 
 Before using this project, make sure you have:
