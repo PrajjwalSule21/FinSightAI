@@ -7,7 +7,7 @@ from Services.finance_data import fundamental_analysis
 from LyzrAgent.agent import chat_with_agent
 
 app = FastAPI(
-    title="Stock Data Tool API",
+    title="FinSightAI",
     description="API for performing fundamental analysis on stock data using Lyzr Agent.",
     version="1.0.0"
 )
@@ -38,7 +38,7 @@ def get_api_key(api_key: str = Security(api_key_header)):
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Stock Data Tool API"}
+    return {"message": "Welcome to the FinSightAI API"}
 
 
 class TickerRequest(BaseModel):
