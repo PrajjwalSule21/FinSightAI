@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Security, status
 from fastapi.params import Depends
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 from Services.finance_data import fundamental_analysis
 from LyzrAgent.agent import chat_with_agent
@@ -44,37 +45,50 @@ async def root():
 class TickerRequest(BaseModel):
     symbol: str
 
+
 @app.post("/fundamental-analysis")
 async def fundamental_analysis_report(request: TickerRequest, api_key: str = Depends(get_api_key)):
     symbol = request.symbol.upper()
 
     try:
         financial_data = fundamental_analysis(symbol)
+
         if not financial_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No financial data found for ticker: {symbol}"
             )
-        analysis_report = chat_with_agent(
-            message=f"Financial Data:\n{financial_data}",
-            user_api_key=api_key)
-        
+
+        try:
+            analysis_report = chat_with_agent(
+                message=f"Financial Data:\n{financial_data}",
+                user_api_key=api_key
+            )
+        except Exception as e:
+            logging.exception("❌ Error calling chat_with_agent()")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error from chat_with_agent(): {str(e)}"
+            )
+
         if not analysis_report:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to get analysis report from Lyzr Agent"
+                status_code=500,
+                detail="Lyzr Agent returned empty or invalid response."
             )
-        
+
         return {
             "symbol": symbol,
             "financial_data": financial_data,
             "analysis_report": analysis_report
         }
-            
+
     except HTTPException as http_exc:
         raise http_exc
+
     except Exception as e:
+        logging.exception("❌ Unexpected error in fundamental_analysis_report()")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            status_code=500,
+            detail=f"Internal error: {str(e)}"
         )
